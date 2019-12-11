@@ -24,6 +24,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
+	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
@@ -45,6 +46,14 @@ func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 			resource.BinarySI),
 	}
 
+	// discover isolcpus via cpuset function - isolcpus info not available from cadvisor
+	isolcpus, err := topology.GetIsolcpus()
+	if err != nil {
+		return nil
+	}
+	isolcpusCount := isolcpus.Size()
+
+	c[v1helper.IsolcpusResourceName()] = *resource.NewQuantity(int64(isolcpusCount), resource.DecimalSI)
 	// if huge pages are enabled, we report them as a schedulable resource on the node
 	for _, hugepagesInfo := range info.HugePages {
 		pageSizeBytes := int64(hugepagesInfo.PageSize * 1024)

@@ -281,6 +281,26 @@ func getUniqueCoreID(threads []int) (coreID int, err error) {
 	return min, nil
 }
 
+// GetIsolcpus uses sysfs to return a cpuset of isolcpus on the node
+//
+// TODO: This is a temporary workaround until cadvisor provides this
+// information directly in machineInfo. We should remove this once this
+// information is available from cadvisor.
+func GetIsolcpus() (cpuset.CPUSet, error) {
+	isolcpuslist, err := ioutil.ReadFile("/sys/devices/system/cpu/isolated")
+	if err != nil {
+		return cpuset.CPUSet{}, err
+	}
+
+	// Parse the isolcpuslist into a set of cpu ids
+	isolcpus, err := cpuset.Parse(strings.TrimSpace(string(isolcpuslist)))
+	if err != nil {
+		return cpuset.CPUSet{}, err
+	}
+
+	return isolcpus, nil
+}
+
 // GetNUMANodeInfo uses sysfs to return a map of NUMANode id to the list of
 // CPUs associated with that NUMANode.
 //

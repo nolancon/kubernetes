@@ -74,6 +74,10 @@ func HugePageResourceName(pageSize resource.Quantity) v1.ResourceName {
 	return v1.ResourceName(fmt.Sprintf("%s%s", v1.ResourceHugePagesPrefix, pageSize.String()))
 }
 
+func IsolcpusResourceName() v1.ResourceName {
+	return v1.ResourceName("isolcpus")
+}
+
 // HugePageSizeFromResourceName returns the page size for the specified huge page
 // resource name.  If the specified input is not a valid huge page resource name
 // an error is returned.
