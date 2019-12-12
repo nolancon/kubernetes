@@ -32,6 +32,14 @@ func (rl *ResourceList) CPU() *resource.Quantity {
 	return &resource.Quantity{Format: resource.DecimalSI}
 }
 
+// Isolcpus returns the Isolcpus limit if specified.
+func (rl *ResourceList) Isolcpus() *resource.Quantity {
+	if val, ok := (*rl)[ResourceIsolcpus]; ok {
+		return &val
+	}
+	return &resource.Quantity{Format: resource.DecimalSI}
+}
+
 // Memory returns the Memory limit if specified.
 func (rl *ResourceList) Memory() *resource.Quantity {
 	if val, ok := (*rl)[ResourceMemory]; ok {

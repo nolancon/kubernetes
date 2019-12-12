@@ -4576,6 +4576,8 @@ type ResourceName string
 const (
 	// CPU, in cores. (500m = .5 cores)
 	ResourceCPU ResourceName = "cpu"
+	// Isolcpus, in cores. (500m = .5 cores)
+	ResourceIsolcpus ResourceName = "isolcpus"
 	// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceMemory ResourceName = "memory"
 	// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
@@ -5273,6 +5275,8 @@ const (
 	ResourceServicesLoadBalancers ResourceName = "services.loadbalancers"
 	// CPU request, in cores. (500m = .5 cores)
 	ResourceRequestsCPU ResourceName = "requests.cpu"
+	// Isolcpus request, in cores. (500m = .5 cores)
+	ResourceRequestsIsolcpus ResourceName = "requests.isolcpus"
 	// Memory request, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceRequestsMemory ResourceName = "requests.memory"
 	// Storage request, in bytes
@@ -5281,6 +5285,8 @@ const (
 	ResourceRequestsEphemeralStorage ResourceName = "requests.ephemeral-storage"
 	// CPU limit, in cores. (500m = .5 cores)
 	ResourceLimitsCPU ResourceName = "limits.cpu"
+	// Isolcpus limit, in cores. (500m = .5 cores)
+	ResourceLimitsIsolcpus ResourceName = "limits.isolcpus"
 	// Memory limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 	ResourceLimitsMemory ResourceName = "limits.memory"
 	// Local ephemeral storage limit, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)

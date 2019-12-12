@@ -37,23 +37,21 @@ const (
 
 // CapacityFromMachineInfo returns the capacity of the resources from the machine info.
 func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
+	// discover isolcpus via cpuset function - isolcpus info not available from cadvisor
+	isolcpus, _ := topology.GetIsolcpus()
+
 	c := v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(
-			int64(info.NumCores*1000),
+			int64(info.NumCores*1000)-int64(isolcpus.Size()*1000),
+			resource.DecimalSI),
+		v1.ResourceIsolcpus: *resource.NewMilliQuantity(
+			int64(isolcpus.Size()*1000),
 			resource.DecimalSI),
 		v1.ResourceMemory: *resource.NewQuantity(
 			int64(info.MemoryCapacity),
 			resource.BinarySI),
 	}
 
-	// discover isolcpus via cpuset function - isolcpus info not available from cadvisor
-	isolcpus, err := topology.GetIsolcpus()
-	if err != nil {
-		return nil
-	}
-	isolcpusCount := isolcpus.Size()
-
-	c[v1helper.IsolcpusResourceName()] = *resource.NewQuantity(int64(isolcpusCount), resource.DecimalSI)
 	// if huge pages are enabled, we report them as a schedulable resource on the node
 	for _, hugepagesInfo := range info.HugePages {
 		pageSizeBytes := int64(hugepagesInfo.PageSize * 1024)
