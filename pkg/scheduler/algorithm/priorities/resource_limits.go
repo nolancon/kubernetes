@@ -52,10 +52,11 @@ func ResourceLimitsPriorityMap(pod *v1.Pod, meta interface{}, nodeInfo *schedule
 	}
 
 	cpuScore := computeScore(podLimits.MilliCPU, allocatableResources.MilliCPU)
+	isolcpusScore := computeScore(podLimits.MilliIsolcpus, allocatableResources.MilliIsolcpus)
 	memScore := computeScore(podLimits.Memory, allocatableResources.Memory)
 
 	score := int64(0)
-	if cpuScore == 1 || memScore == 1 {
+	if cpuScore == 1 || memScore == 1 || isolcpusScore == 1 {
 		score = 1
 	}
 
@@ -63,10 +64,10 @@ func ResourceLimitsPriorityMap(pod *v1.Pod, meta interface{}, nodeInfo *schedule
 		// We explicitly don't do klog.V(10).Infof() to avoid computing all the parameters if this is
 		// not logged. There is visible performance gain from it.
 		klog.Infof(
-			"%v -> %v: Resource Limits Priority, allocatable %d millicores %d memory bytes, pod limits %d millicores %d memory bytes, score %d",
+			"%v -> %v: Resource Limits Priority, allocatable %d millicores %d milliisolcpus %d memory bytes, pod limits %d millicores %d milliisolcpus %d memory bytes, score %d",
 			pod.Name, node.Name,
-			allocatableResources.MilliCPU, allocatableResources.Memory,
-			podLimits.MilliCPU, podLimits.Memory,
+			allocatableResources.MilliCPU, allocatableResources.MilliIsolcpus, allocatableResources.Memory,
+			podLimits.MilliCPU, podLimits.MilliIsolcpus, podLimits.Memory,
 			score,
 		)
 	}

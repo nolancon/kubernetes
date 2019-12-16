@@ -142,6 +142,7 @@ func (transientSchedInfo *TransientSchedulerInfo) ResetTransientSchedulerInfo() 
 // Resource is a collection of compute resource.
 type Resource struct {
 	MilliCPU         int64
+	MilliIsolcpus    int64
 	Memory           int64
 	EphemeralStorage int64
 	// We store allowedPodNumber (which is Node.Status.Allocatable.Pods().Value())
@@ -168,6 +169,8 @@ func (r *Resource) Add(rl v1.ResourceList) {
 		switch rName {
 		case v1.ResourceCPU:
 			r.MilliCPU += rQuant.MilliValue()
+		case v1.ResourceIsolcpus:
+			r.MilliIsolcpus += rQuant.MilliValue()
 		case v1.ResourceMemory:
 			r.Memory += rQuant.Value()
 		case v1.ResourcePods:
@@ -186,6 +189,7 @@ func (r *Resource) Add(rl v1.ResourceList) {
 func (r *Resource) ResourceList() v1.ResourceList {
 	result := v1.ResourceList{
 		v1.ResourceCPU:              *resource.NewMilliQuantity(r.MilliCPU, resource.DecimalSI),
+		v1.ResourceIsolcpus:         *resource.NewMilliQuantity(r.MilliIsolcpus, resource.DecimalSI),
 		v1.ResourceMemory:           *resource.NewQuantity(r.Memory, resource.BinarySI),
 		v1.ResourcePods:             *resource.NewQuantity(int64(r.AllowedPodNumber), resource.BinarySI),
 		v1.ResourceEphemeralStorage: *resource.NewQuantity(r.EphemeralStorage, resource.BinarySI),
@@ -204,6 +208,7 @@ func (r *Resource) ResourceList() v1.ResourceList {
 func (r *Resource) Clone() *Resource {
 	res := &Resource{
 		MilliCPU:         r.MilliCPU,
+		MilliIsolcpus:    r.MilliIsolcpus,
 		Memory:           r.Memory,
 		AllowedPodNumber: r.AllowedPodNumber,
 		EphemeralStorage: r.EphemeralStorage,
@@ -246,6 +251,10 @@ func (r *Resource) SetMaxResource(rl v1.ResourceList) {
 		case v1.ResourceCPU:
 			if cpu := rQuantity.MilliValue(); cpu > r.MilliCPU {
 				r.MilliCPU = cpu
+			}
+		case v1.ResourceIsolcpus:
+			if isolcpus := rQuantity.MilliValue(); isolcpus > r.MilliIsolcpus {
+				r.MilliIsolcpus = isolcpus
 			}
 		case v1.ResourceEphemeralStorage:
 			if ephemeralStorage := rQuantity.Value(); ephemeralStorage > r.EphemeralStorage {
@@ -478,6 +487,7 @@ func hasPodAffinityConstraints(pod *v1.Pod) bool {
 func (n *NodeInfo) AddPod(pod *v1.Pod) {
 	res, non0CPU, non0Mem := calculateResource(pod)
 	n.requestedResource.MilliCPU += res.MilliCPU
+	n.requestedResource.MilliIsolcpus += res.MilliIsolcpus
 	n.requestedResource.Memory += res.Memory
 	n.requestedResource.EphemeralStorage += res.EphemeralStorage
 	if n.requestedResource.ScalarResources == nil && len(res.ScalarResources) > 0 {
@@ -573,7 +583,6 @@ func calculateResource(pod *v1.Pod) (res Resource, non0CPU int64, non0Mem int64)
 		if _, found := pod.Spec.Overhead[v1.ResourceCPU]; found {
 			non0CPU += pod.Spec.Overhead.Cpu().MilliValue()
 		}
-
 		if _, found := pod.Spec.Overhead[v1.ResourceMemory]; found {
 			non0Mem += pod.Spec.Overhead.Memory().Value()
 		}

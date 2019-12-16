@@ -104,6 +104,8 @@ func calculateResourceAllocatableRequest(nodeInfo *schedulernodeinfo.NodeInfo, p
 	switch resource {
 	case v1.ResourceCPU:
 		return allocatable.MilliCPU, (nodeInfo.NonZeroRequest().MilliCPU + podRequest)
+	case v1.ResourceIsolcpus:
+		return allocatable.MilliIsolcpus, (nodeInfo.NonZeroRequest().MilliIsolcpus + podRequest)
 	case v1.ResourceMemory:
 		return allocatable.Memory, (nodeInfo.NonZeroRequest().Memory + podRequest)
 

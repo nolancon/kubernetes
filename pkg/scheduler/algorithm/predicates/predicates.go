@@ -819,6 +819,9 @@ func PodFitsResources(pod *v1.Pod, meta Metadata, nodeInfo *schedulernodeinfo.No
 	if allocatable.MilliCPU < podRequest.MilliCPU+nodeInfo.RequestedResource().MilliCPU {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceCPU, podRequest.MilliCPU, nodeInfo.RequestedResource().MilliCPU, allocatable.MilliCPU))
 	}
+	if allocatable.MilliIsolcpus < podRequest.MilliIsolcpus+nodeInfo.RequestedResource().MilliIsolcpus {
+		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceIsolcpus, podRequest.MilliIsolcpus, nodeInfo.RequestedResource().MilliIsolcpus, allocatable.MilliIsolcpus))
+	}
 	if allocatable.Memory < podRequest.Memory+nodeInfo.RequestedResource().Memory {
 		predicateFails = append(predicateFails, NewInsufficientResourceError(v1.ResourceMemory, podRequest.Memory, nodeInfo.RequestedResource().Memory, allocatable.Memory))
 	}

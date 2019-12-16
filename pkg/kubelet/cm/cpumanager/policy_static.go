@@ -23,7 +23,7 @@ import (
 	"k8s.io/klog"
 	v1qos "k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/state"
-	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
+	topo "k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager/bitmask"
@@ -72,9 +72,12 @@ const PolicyStatic policyName = "static"
 // reconcile period.
 type staticPolicy struct {
 	// cpu socket topology
-	topology *topology.CPUTopology
+	topology *topo.CPUTopology
 	// set of CPUs that is not available for exclusive assignment
 	reserved cpuset.CPUSet
+	// set of isolated CPUs that is available only by specific isolcpus
+	// request in pod spec
+	isolcpus cpuset.CPUSet
 	// containerMap provides a mapping from
 	// (pod, container) -> containerID
 	// for all containers a pod
@@ -89,9 +92,10 @@ var _ Policy = &staticPolicy{}
 // NewStaticPolicy returns a CPU manager policy that does not change CPU
 // assignments for exclusively pinned guaranteed containers after the main
 // container process starts.
-func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, reservedCPUs cpuset.CPUSet, affinity topologymanager.Store) Policy {
+func NewStaticPolicy(topology *topo.CPUTopology, numReservedCPUs int, reservedCPUs cpuset.CPUSet, affinity topologymanager.Store) Policy {
 	allCPUs := topology.CPUDetails.CPUs()
 	var reserved cpuset.CPUSet
+	var isolcpus cpuset.CPUSet
 	if reservedCPUs.Size() > 0 {
 		reserved = reservedCPUs
 	} else {
@@ -109,9 +113,12 @@ func NewStaticPolicy(topology *topology.CPUTopology, numReservedCPUs int, reserv
 
 	klog.Infof("[cpumanager] reserved %d CPUs (\"%s\") not available for exclusive assignment", reserved.Size(), reserved)
 
+	isolcpus, _ = topo.GetIsolcpus()
+
 	return &staticPolicy{
 		topology:     topology,
 		reserved:     reserved,
+		isolcpus:     isolcpus,
 		containerMap: newContainerMap(),
 		affinity:     affinity,
 	}
@@ -195,8 +202,14 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 			p.containerMap.Add(pod, container, containerID)
 		}
 	}()
+	var isolated bool
+	numCPUs := p.guaranteedCPUs(pod, container)
+	if numCPUs == 0 {
+		numCPUs = p.guaranteedIsolcpus(pod, container)
+		isolated = true
+	}
 
-	if numCPUs := p.guaranteedCPUs(pod, container); numCPUs != 0 {
+	if numCPUs != 0 {
 		klog.Infof("[cpumanager] static policy: AddContainer (pod: %s, container: %s, container id: %s)", pod.Name, container.Name, containerID)
 		// container belongs in an exclusively allocated pool
 
@@ -226,13 +239,14 @@ func (p *staticPolicy) AddContainer(s state.State, pod *v1.Pod, container *v1.Co
 		klog.Infof("[cpumanager] Pod %v, Container %v Topology Affinity is: %v", pod.UID, container.Name, hint)
 
 		// Allocate CPUs according to the NUMA affinity contained in the hint.
-		cpuset, err := p.allocateCPUs(s, numCPUs, hint.NUMANodeAffinity)
+		cpuset, err := p.allocateCPUs(s, numCPUs, isolated, hint.NUMANodeAffinity)
 		if err != nil {
 			klog.Errorf("[cpumanager] unable to allocate %d CPUs (container id: %s, error: %v)", numCPUs, containerID, err)
 			return err
 		}
 		s.SetCPUSet(containerID, cpuset)
 	}
+
 	// container belongs in the shared pool (nothing to do; use default cpuset)
 	return nil
 }
@@ -255,7 +269,7 @@ func (p *staticPolicy) RemoveContainer(s state.State, containerID string) (rerr 
 	return nil
 }
 
-func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bitmask.BitMask) (cpuset.CPUSet, error) {
+func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, isolated bool, numaAffinity bitmask.BitMask) (cpuset.CPUSet, error) {
 	klog.Infof("[cpumanager] allocateCpus: (numCPUs: %d, socket: %v)", numCPUs, numaAffinity)
 
 	// If there are aligned CPUs in numaAffinity, attempt to take those first.
@@ -263,7 +277,12 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bit
 	if numaAffinity != nil {
 		alignedCPUs := cpuset.NewCPUSet()
 		for _, numaNodeID := range numaAffinity.GetBits() {
-			alignedCPUs = alignedCPUs.Union(p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
+			if isolated {
+				assignableIsolcpus := p.assignableCPUs(s).Intersection(p.isolcpus)
+				alignedCPUs = alignedCPUs.Union(assignableIsolcpus.Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
+			} else {
+				alignedCPUs = alignedCPUs.Union(p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
+			}
 		}
 
 		numAlignedToAlloc := alignedCPUs.Size()
@@ -293,6 +312,20 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, numaAffinity bit
 	return result, nil
 }
 
+func (p *staticPolicy) guaranteedIsolcpus(pod *v1.Pod, container *v1.Container) int {
+	if v1qos.GetPodQOS(pod) != v1.PodQOSGuaranteed {
+		return 0
+	}
+	isolcpusQuantity := container.Resources.Requests[v1.ResourceIsolcpus]
+	if isolcpusQuantity.Value()*1000 != isolcpusQuantity.MilliValue() {
+		return 0
+	}
+	// Safe downcast to do for all systems with < 2.1 billion CPUs.
+	// Per the language spec, `int` is guaranteed to be at least 32 bits wide.
+	// https://golang.org/ref/spec#Numeric_types
+	return int(isolcpusQuantity.Value())
+}
+
 func (p *staticPolicy) guaranteedCPUs(pod *v1.Pod, container *v1.Container) int {
 	if v1qos.GetPodQOS(pod) != v1.PodQOSGuaranteed {
 		return 0
@@ -308,16 +341,27 @@ func (p *staticPolicy) guaranteedCPUs(pod *v1.Pod, container *v1.Container) int 
 }
 
 func (p *staticPolicy) GetTopologyHints(s state.State, pod v1.Pod, container v1.Container) map[string][]topologymanager.TopologyHint {
-	// If there are no CPU resources requested for this container, we do not
+	// If there are CPU resources requested, Get a count of how many guaranteed
+	// CPUs have been requested and the assignable CPUs.
+	// If there are isolcpus requested, Get a count of how many guaranteed
+	// isolcpus have been requested and the assignable isolcpus.
+	// If there are no CPU resources or isolcpus requested for this container, we do not
 	// generate any topology hints.
-	if _, ok := container.Resources.Requests[v1.ResourceCPU]; !ok {
+
+	var requested int
+	var available cpuset.CPUSet
+
+	if _, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
+		requested = p.guaranteedCPUs(&pod, &container)
+		available = p.assignableCPUs(s)
+	} else if _, ok := container.Resources.Requests[v1.ResourceIsolcpus]; ok {
+		requested = p.guaranteedIsolcpus(&pod, &container)
+		available = p.isolcpus
+	} else {
 		return nil
 	}
 
-	// Get a count of how many guaranteed CPUs have been requested.
-	requested := p.guaranteedCPUs(&pod, &container)
-
-	// If there are no guaranteed CPUs being requested, we do not generate
+	// If there are no guaranteed CPUs or isolcpus being requested, we do not generate
 	// any topology hints. This can happen, for example, because init
 	// containers don't have to have guaranteed CPUs in order for the pod
 	// to still be in the Guaranteed QOS tier.
@@ -341,9 +385,6 @@ func (p *staticPolicy) GetTopologyHints(s state.State, pod v1.Pod, container v1.
 			string(v1.ResourceCPU): p.generateCPUTopologyHints(allocated, requested),
 		}
 	}
-
-	// Get a list of available CPUs.
-	available := p.assignableCPUs(s)
 
 	// Generate hints.
 	cpuHints := p.generateCPUTopologyHints(available, requested)
