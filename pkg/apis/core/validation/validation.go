@@ -5073,12 +5073,6 @@ func ValidateResourceRequirements(requirements *core.ResourceRequirements, fldPa
 	limContainsHugePages := false
 	reqContainsHugePages := false
 	supportedQoSComputeResources := sets.NewString(string(core.ResourceCPU), string(core.ResourceIsolcpus), string(core.ResourceMemory))
-
-	reqContainsCPU := false
-	limContainsCPU := false
-	reqContainsIsolcpus := false
-	limContainsIsolcpus := false
-
 	for resourceName, quantity := range requirements.Limits {
 
 		fldPath := limPath.Key(string(resourceName))
@@ -5094,14 +5088,6 @@ func ValidateResourceRequirements(requirements *core.ResourceRequirements, fldPa
 
 		if supportedQoSComputeResources.Has(string(resourceName)) {
 			limContainsCPUOrMemory = true
-		}
-
-		if string(core.ResourceCPU) == string(resourceName) {
-			limContainsCPU = true
-		}
-
-		if string(core.ResourceIsolcpus) == string(resourceName) {
-			limContainsIsolcpus = true
 		}
 	}
 	for resourceName, quantity := range requirements.Requests {
@@ -5129,22 +5115,10 @@ func ValidateResourceRequirements(requirements *core.ResourceRequirements, fldPa
 		if supportedQoSComputeResources.Has(string(resourceName)) {
 			reqContainsCPUOrMemory = true
 		}
-		if string(core.ResourceCPU) == string(resourceName) {
-			reqContainsCPU = true
-		}
-
-		if string(core.ResourceIsolcpus) == string(resourceName) {
-			reqContainsIsolcpus = true
-		}
 
 	}
 	if !limContainsCPUOrMemory && !reqContainsCPUOrMemory && (reqContainsHugePages || limContainsHugePages) {
 		allErrs = append(allErrs, field.Forbidden(fldPath, fmt.Sprintf("HugePages require cpu or memory")))
-	}
-
-	if (limContainsCPU && limContainsIsolcpus) || (reqContainsCPU && reqContainsIsolcpus) {
-		allErrs = append(allErrs, field.Forbidden(fldPath, fmt.Sprintf("Only one of cpus or isolcpus may be requested")))
-
 	}
 
 	return allErrs

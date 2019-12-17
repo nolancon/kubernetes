@@ -274,6 +274,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, isolated bool, n
 
 	// If there are aligned CPUs in numaAffinity, attempt to take those first.
 	result := cpuset.NewCPUSet()
+	assignableCPUs := p.assignableCPUs(s).Difference(p.isolcpus)
 	if numaAffinity != nil {
 		alignedCPUs := cpuset.NewCPUSet()
 		for _, numaNodeID := range numaAffinity.GetBits() {
@@ -281,7 +282,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, isolated bool, n
 				assignableIsolcpus := p.assignableCPUs(s).Intersection(p.isolcpus)
 				alignedCPUs = alignedCPUs.Union(assignableIsolcpus.Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
 			} else {
-				alignedCPUs = alignedCPUs.Union(p.assignableCPUs(s).Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
+				alignedCPUs = alignedCPUs.Union(assignableCPUs.Intersection(p.topology.CPUDetails.CPUsInNUMANodes(numaNodeID)))
 			}
 		}
 
@@ -299,7 +300,7 @@ func (p *staticPolicy) allocateCPUs(s state.State, numCPUs int, isolated bool, n
 	}
 
 	// Get any remaining CPUs from what's leftover after attempting to grab aligned ones.
-	remainingCPUs, err := takeByTopology(p.topology, p.assignableCPUs(s).Difference(result), numCPUs-result.Size())
+	remainingCPUs, err := takeByTopology(p.topology, assignableCPUs.Difference(result), numCPUs-result.Size())
 	if err != nil {
 		return cpuset.NewCPUSet(), err
 	}
@@ -356,7 +357,7 @@ func (p *staticPolicy) GetTopologyHints(s state.State, pod v1.Pod, container v1.
 		available = p.assignableCPUs(s)
 	} else if _, ok := container.Resources.Requests[v1.ResourceIsolcpus]; ok {
 		requested = p.guaranteedIsolcpus(&pod, &container)
-		available = p.isolcpus
+		available = p.assignableCPUs(s).Intersection(p.isolcpus)
 	} else {
 		return nil
 	}
