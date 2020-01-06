@@ -809,6 +809,7 @@ func PodFitsResources(pod *v1.Pod, meta Metadata, nodeInfo *schedulernodeinfo.No
 		podRequest = GetResourceRequest(pod)
 	}
 	if podRequest.MilliCPU == 0 &&
+		podRequest.MilliIsolcpus == 0 &&
 		podRequest.Memory == 0 &&
 		podRequest.EphemeralStorage == 0 &&
 		len(podRequest.ScalarResources) == 0 {

@@ -485,7 +485,7 @@ func hasPodAffinityConstraints(pod *v1.Pod) bool {
 
 // AddPod adds pod information to this NodeInfo.
 func (n *NodeInfo) AddPod(pod *v1.Pod) {
-	res, non0CPU, non0Mem := calculateResource(pod)
+	res, non0CPU, non0Isolcpus, non0Mem := calculateResource(pod)
 	n.requestedResource.MilliCPU += res.MilliCPU
 	n.requestedResource.MilliIsolcpus += res.MilliIsolcpus
 	n.requestedResource.Memory += res.Memory
@@ -497,6 +497,7 @@ func (n *NodeInfo) AddPod(pod *v1.Pod) {
 		n.requestedResource.ScalarResources[rName] += rQuant
 	}
 	n.nonzeroRequest.MilliCPU += non0CPU
+	n.nonzeroRequest.MilliIsolcpus += non0Isolcpus
 	n.nonzeroRequest.Memory += non0Mem
 	n.pods = append(n.pods, pod)
 	if hasPodAffinityConstraints(pod) {
@@ -540,9 +541,10 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 			n.pods[i] = n.pods[len(n.pods)-1]
 			n.pods = n.pods[:len(n.pods)-1]
 			// reduce the resource data
-			res, non0CPU, non0Mem := calculateResource(pod)
+			res, non0CPU, non0Isolcpus, non0Mem := calculateResource(pod)
 
 			n.requestedResource.MilliCPU -= res.MilliCPU
+			n.requestedResource.MilliIsolcpus -= res.MilliIsolcpus
 			n.requestedResource.Memory -= res.Memory
 			n.requestedResource.EphemeralStorage -= res.EphemeralStorage
 			if len(res.ScalarResources) > 0 && n.requestedResource.ScalarResources == nil {
@@ -552,6 +554,7 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 				n.requestedResource.ScalarResources[rName] -= rQuant
 			}
 			n.nonzeroRequest.MilliCPU -= non0CPU
+			n.nonzeroRequest.MilliIsolcpus -= non0Isolcpus
 			n.nonzeroRequest.Memory -= non0Mem
 
 			// Release ports when remove Pods.
@@ -565,13 +568,14 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 	return fmt.Errorf("no corresponding pod %s in pods of node %s", pod.Name, n.node.Name)
 }
 
-func calculateResource(pod *v1.Pod) (res Resource, non0CPU int64, non0Mem int64) {
+func calculateResource(pod *v1.Pod) (res Resource, non0CPU int64, non0Isolcpus int64, non0Mem int64) {
 	resPtr := &res
 	for _, c := range pod.Spec.Containers {
 		resPtr.Add(c.Resources.Requests)
 
-		non0CPUReq, non0MemReq := priorityutil.GetNonzeroRequests(&c.Resources.Requests)
+		non0CPUReq, non0IsolcpusReq, non0MemReq := priorityutil.GetNonzeroRequests(&c.Resources.Requests)
 		non0CPU += non0CPUReq
+		non0Isolcpus += non0IsolcpusReq
 		non0Mem += non0MemReq
 		// No non-zero resources for GPUs or opaque resources.
 	}
@@ -582,6 +586,9 @@ func calculateResource(pod *v1.Pod) (res Resource, non0CPU int64, non0Mem int64)
 
 		if _, found := pod.Spec.Overhead[v1.ResourceCPU]; found {
 			non0CPU += pod.Spec.Overhead.Cpu().MilliValue()
+		}
+		if _, found := pod.Spec.Overhead[v1.ResourceIsolcpus]; found {
+			non0Isolcpus += pod.Spec.Overhead.Isolcpus().MilliValue()
 		}
 		if _, found := pod.Spec.Overhead[v1.ResourceMemory]; found {
 			non0Mem += pod.Spec.Overhead.Memory().Value()

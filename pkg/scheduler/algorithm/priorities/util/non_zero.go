@@ -32,14 +32,17 @@ import (
 const (
 	// DefaultMilliCPURequest defines default milli cpu request number.
 	DefaultMilliCPURequest int64 = 100 // 0.1 core
+	// DefaultMilliIsolcpusRequest defines default milli isolcpus request number.
+	DefaultMilliIsolcpusRequest int64 = 100
 	// DefaultMemoryRequest defines default memory request size.
 	DefaultMemoryRequest int64 = 200 * 1024 * 1024 // 200 MB
 )
 
 // GetNonzeroRequests returns the default cpu and memory resource request if none is found or
 // what is provided on the request.
-func GetNonzeroRequests(requests *v1.ResourceList) (int64, int64) {
+func GetNonzeroRequests(requests *v1.ResourceList) (int64, int64, int64) {
 	return GetNonzeroRequestForResource(v1.ResourceCPU, requests),
+		GetNonzeroRequestForResource(v1.ResourceIsolcpus, requests),
 		GetNonzeroRequestForResource(v1.ResourceMemory, requests)
 }
 
@@ -53,6 +56,12 @@ func GetNonzeroRequestForResource(resource v1.ResourceName, requests *v1.Resourc
 			return DefaultMilliCPURequest
 		}
 		return requests.Cpu().MilliValue()
+	case v1.ResourceIsolcpus:
+		// Override if un-set, but not if explicitly set to zero
+		if _, found := (*requests)[v1.ResourceIsolcpus]; !found {
+			return DefaultMilliIsolcpusRequest
+		}
+		return requests.Isolcpus().MilliValue()
 	case v1.ResourceMemory:
 		// Override if un-set, but not if explicitly set to zero
 		if _, found := (*requests)[v1.ResourceMemory]; !found {
