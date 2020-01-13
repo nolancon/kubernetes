@@ -51,6 +51,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager"
 	cputopology "k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
+	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	"k8s.io/kubernetes/pkg/kubelet/cm/devicemanager"
 	"k8s.io/kubernetes/pkg/kubelet/cm/topologymanager"
 	cmutil "k8s.io/kubernetes/pkg/kubelet/cm/util"
@@ -313,6 +314,15 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 		return nil, err
 	}
 
+	var isolcpus cpuset.CPUSet
+	// Check Isolcpus feature gate. If true, discover isolcpus.
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.Isolcpus) {
+		isolcpus, err = cputopology.GetIsolcpus()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Initialize CPU manager
 	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUManager) {
 		cm.cpuManager, err = cpumanager.NewManager(
@@ -321,6 +331,7 @@ func NewContainerManager(mountUtil mount.Interface, cadvisorInterface cadvisor.I
 			machineInfo,
 			numaNodeInfo,
 			nodeConfig.NodeAllocatableConfig.ReservedSystemCPUs,
+			isolcpus,
 			cm.GetNodeAllocatableReservation(),
 			nodeConfig.KubeletRootDir,
 			cm.topologyManager,

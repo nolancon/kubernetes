@@ -23,8 +23,11 @@ import (
 	cadvisorapi2 "github.com/google/cadvisor/info/v2"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
+	kubefeatures "k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/cm/cpumanager/topology"
+	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
@@ -38,7 +41,12 @@ const (
 // CapacityFromMachineInfo returns the capacity of the resources from the machine info.
 func CapacityFromMachineInfo(info *cadvisorapi.MachineInfo) v1.ResourceList {
 	// discover isolcpus via cpuset function - isolcpus info not available from cadvisor
-	isolcpus, _ := topology.GetIsolcpus()
+	//isolcpus, _ := topology.GetIsolcpus()
+	var isolcpus cpuset.CPUSet
+	// Check Isolcpus feature gate. If true, discover isolcpus.
+	if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.Isolcpus) {
+		isolcpus, _ = topology.GetIsolcpus()
+	}
 
 	c := v1.ResourceList{
 		v1.ResourceCPU: *resource.NewMilliQuantity(

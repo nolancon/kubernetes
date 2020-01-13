@@ -161,6 +161,8 @@ const (
 	// Enable resource managers to make NUMA aligned decisions
 	TopologyManager featuregate.Feature = "TopologyManager"
 
+	Isolcpus featuregate.Feature = "Isolcpus"
+
 	// owner: @sjenning
 	// beta: v1.11
 	//
@@ -578,6 +580,7 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 	CPUManager:                     {Default: true, PreRelease: featuregate.Beta},
 	CPUCFSQuotaPeriod:              {Default: false, PreRelease: featuregate.Alpha},
 	TopologyManager:                {Default: false, PreRelease: featuregate.Alpha},
+	Isolcpus:                       {Default: false, PreRelease: featuregate.Alpha},
 	ServiceNodeExclusion:           {Default: false, PreRelease: featuregate.Alpha},
 	NodeDisruptionExclusion:        {Default: false, PreRelease: featuregate.Alpha},
 	CSIDriverRegistry:              {Default: true, PreRelease: featuregate.Beta},

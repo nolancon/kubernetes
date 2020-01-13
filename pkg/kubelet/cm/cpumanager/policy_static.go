@@ -92,10 +92,9 @@ var _ Policy = &staticPolicy{}
 // NewStaticPolicy returns a CPU manager policy that does not change CPU
 // assignments for exclusively pinned guaranteed containers after the main
 // container process starts.
-func NewStaticPolicy(topology *topo.CPUTopology, numReservedCPUs int, reservedCPUs cpuset.CPUSet, affinity topologymanager.Store) Policy {
+func NewStaticPolicy(topology *topo.CPUTopology, numReservedCPUs int, reservedCPUs cpuset.CPUSet, isolcpus cpuset.CPUSet, affinity topologymanager.Store) Policy {
 	allCPUs := topology.CPUDetails.CPUs()
 	var reserved cpuset.CPUSet
-	var isolcpus cpuset.CPUSet
 	if reservedCPUs.Size() > 0 {
 		reserved = reservedCPUs
 	} else {
@@ -112,8 +111,6 @@ func NewStaticPolicy(topology *topo.CPUTopology, numReservedCPUs int, reservedCP
 	}
 
 	klog.Infof("[cpumanager] reserved %d CPUs (\"%s\") not available for exclusive assignment", reserved.Size(), reserved)
-
-	isolcpus, _ = topo.GetIsolcpus()
 
 	return &staticPolicy{
 		topology:     topology,
