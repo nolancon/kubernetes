@@ -65,6 +65,8 @@ type manager struct {
 	podMap map[string]string
 	//Topology Manager Policy
 	policy Policy
+
+	podRequestablePolicies map[string]Policy
 }
 
 // HintProvider is an interface for components that want to collaborate to
@@ -153,14 +155,20 @@ func NewManager(numaNodeInfo cputopology.NUMANodeInfo, topologyPolicyName string
 		return nil, fmt.Errorf("unknown policy: \"%s\"", topologyPolicyName)
 	}
 
+	podRequestablePolicies := make(map[string]Policy)
+	podRequestablePolicies[PolicyBestEffort] = NewBestEffortPolicy(numaNodes)
+	podRequestablePolicies[PolicyRestricted] = NewRestrictedPolicy(numaNodes)
+	podRequestablePolicies[PolicySingleNumaNode] = NewSingleNumaNodePolicy(numaNodes)
+
 	var hp []HintProvider
 	pth := make(map[string]map[string]TopologyHint)
 	pm := make(map[string]string)
 	manager := &manager{
-		hintProviders:    hp,
-		podTopologyHints: pth,
-		podMap:           pm,
-		policy:           policy,
+		hintProviders:          hp,
+		podTopologyHints:       pth,
+		podMap:                 pm,
+		policy:                 policy,
+		podRequestablePolicies: podRequestablePolicies,
 	}
 
 	return manager, nil
@@ -193,9 +201,17 @@ func (m *manager) allocateAlignedResources(pod *v1.Pod, container *v1.Container)
 }
 
 // Collect Hints from hint providers and pass to policy to retrieve the best one.
-func (m *manager) calculateAffinity(pod *v1.Pod, container *v1.Container) (TopologyHint, bool) {
+func (m *manager) calculateAffinity(pod *v1.Pod, container *v1.Container, podRequestedPolicy string) (TopologyHint, bool) {
 	providersHints := m.accumulateProvidersHints(pod, container)
-	bestHint, admit := m.policy.Merge(providersHints)
+	var admit bool
+	var bestHint TopologyHint
+	if podRequestedPolicy == PolicyNone {
+		bestHint, admit = m.policy.Merge(providersHints)
+	} else {
+		klog.Infof("[topologymanager] Pod requesting policy %v, overriding node policy", podRequestedPolicy)
+		bestHint, admit = m.podRequestablePolicies[podRequestedPolicy].Merge(providersHints)
+	}
+
 	klog.Infof("[topologymanager] ContainerTopologyHint: %v", bestHint)
 	return bestHint, admit
 }
@@ -229,12 +245,29 @@ func (m *manager) RemoveContainer(containerID string) error {
 	return nil
 }
 
+func (m *manager) getPodRequestedPolicy(pod *v1.Pod) string {
+	podAnnotations := pod.GetObjectMeta().GetAnnotations()
+	if policy, ok := podAnnotations["topology-manager-policy"]; ok {
+		switch policy {
+		case PolicyBestEffort:
+			return PolicyBestEffort
+		case PolicyRestricted:
+			return PolicyRestricted
+		case PolicySingleNumaNode:
+			return PolicySingleNumaNode
+		default:
+			return PolicyNone
+		}
+	}
+	return PolicyNone
+}
+
 func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitResult {
 	klog.Infof("[topologymanager] Topology Admit Handler")
 	pod := attrs.Pod
-
+	podRequestedPolicy := m.getPodRequestedPolicy(pod)
 	for _, container := range append(pod.Spec.InitContainers, pod.Spec.Containers...) {
-		if m.policy.Name() == PolicyNone {
+		if m.policy.Name() == PolicyNone && podRequestedPolicy == PolicyNone {
 			err := m.allocateAlignedResources(pod, &container)
 			if err != nil {
 				return lifecycle.PodAdmitResult{
@@ -246,7 +279,7 @@ func (m *manager) Admit(attrs *lifecycle.PodAdmitAttributes) lifecycle.PodAdmitR
 			continue
 		}
 
-		result, admit := m.calculateAffinity(pod, &container)
+		result, admit := m.calculateAffinity(pod, &container, podRequestedPolicy)
 		if !admit {
 			return lifecycle.PodAdmitResult{
 				Message: "Resources cannot be allocated with Topology locality",
