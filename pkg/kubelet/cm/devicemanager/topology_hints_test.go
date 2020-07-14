@@ -97,10 +97,6 @@ func TestGetTopologyHints(t *testing.T) {
 						NUMANodeAffinity: makeSocketMask(1),
 						Preferred:        true,
 					},
-					{
-						NUMANodeAffinity: makeSocketMask(0, 1),
-						Preferred:        false,
-					},
 				},
 			},
 		},
@@ -126,10 +122,6 @@ func TestGetTopologyHints(t *testing.T) {
 					{
 						NUMANodeAffinity: makeSocketMask(1),
 						Preferred:        true,
-					},
-					{
-						NUMANodeAffinity: makeSocketMask(0, 1),
-						Preferred:        false,
 					},
 				},
 			},
@@ -257,10 +249,6 @@ func TestGetTopologyHints(t *testing.T) {
 					{
 						NUMANodeAffinity: makeSocketMask(0),
 						Preferred:        true,
-					},
-					{
-						NUMANodeAffinity: makeSocketMask(0, 1),
-						Preferred:        false,
 					},
 				},
 			},

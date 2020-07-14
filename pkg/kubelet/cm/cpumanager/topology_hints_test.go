@@ -32,14 +32,16 @@ import (
 )
 
 func TestGetTopologyHints(t *testing.T) {
-	testPod1 := makePod("fakePod", "fakeContainer", "2", "2")
+	testPod1 := makePod("fakePod", "fakeContainer", "1", "1")
 	testContainer1 := &testPod1.Spec.Containers[0]
-	testPod2 := makePod("fakePod", "fakeContainer", "5", "5")
+	testPod2 := makePod("fakePod", "fakeContainer", "2", "2")
 	testContainer2 := &testPod2.Spec.Containers[0]
-	testPod3 := makePod("fakePod", "fakeContainer", "7", "7")
+	testPod3 := makePod("fakePod", "fakeContainer", "5", "5")
 	testContainer3 := &testPod3.Spec.Containers[0]
-	testPod4 := makePod("fakePod", "fakeContainer", "11", "11")
+	testPod4 := makePod("fakePod", "fakeContainer", "7", "7")
 	testContainer4 := &testPod4.Spec.Containers[0]
+	testPod5 := makePod("fakePod", "fakeContainer", "11", "11")
+	testContainer5 := &testPod5.Spec.Containers[0]
 
 	firstSocketMask, _ := bitmask.NewBitMask(0)
 	secondSocketMask, _ := bitmask.NewBitMask(1)
@@ -79,9 +81,57 @@ func TestGetTopologyHints(t *testing.T) {
 		expectedHints []topologymanager.TopologyHint
 	}{
 		{
-			name:          "Request 2 CPUs, 4 available on NUMA 0, 6 available on NUMA 1",
+			name:          "Request 1 CPU, 6 available on NUMA 0, 6 available on NUMA 1",
 			pod:           *testPod1,
 			container:     *testContainer1,
+			defaultCPUSet: cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+			expectedHints: []topologymanager.TopologyHint{
+				{
+					NUMANodeAffinity: firstSocketMask,
+					Preferred:        true,
+				},
+				{
+					NUMANodeAffinity: secondSocketMask,
+					Preferred:        true,
+				},
+			},
+		},
+		{
+			name:          "Request 1 CPU, 4 available on NUMA 0, 0 available on NUMA 1",
+			pod:           *testPod1,
+			container:     *testContainer1,
+			defaultCPUSet: cpuset.NewCPUSet(0, 1, 2, 6, 7, 8),
+			expectedHints: []topologymanager.TopologyHint{
+				{
+					NUMANodeAffinity: firstSocketMask,
+					Preferred:        true,
+				},
+			},
+		},
+		{
+			name:          "Request 1 CPU, 0 available on NUMA 0, 2 available on NUMA 1",
+			pod:           *testPod1,
+			container:     *testContainer1,
+			defaultCPUSet: cpuset.NewCPUSet(3, 4),
+			expectedHints: []topologymanager.TopologyHint{
+				{
+					NUMANodeAffinity: secondSocketMask,
+					Preferred:        true,
+				},
+			},
+		},
+		{
+			name:          "Request 1 CPU, 0 available on NUMA 0, 0 available on NUMA 1",
+			pod:           *testPod1,
+			container:     *testContainer1,
+			defaultCPUSet: cpuset.NewCPUSet(),
+			expectedHints: []topologymanager.TopologyHint{},
+		},
+
+		{
+			name:          "Request 2 CPUs, 4 available on NUMA 0, 6 available on NUMA 1",
+			pod:           *testPod2,
+			container:     *testContainer2,
 			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
 			expectedHints: []topologymanager.TopologyHint{
 				{
@@ -100,8 +150,8 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:          "Request 5 CPUs, 4 available on NUMA 0, 6 available on NUMA 1",
-			pod:           *testPod2,
-			container:     *testContainer2,
+			pod:           *testPod3,
+			container:     *testContainer3,
 			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
 			expectedHints: []topologymanager.TopologyHint{
 				{
@@ -116,8 +166,8 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:          "Request 7 CPUs, 4 available on NUMA 0, 6 available on NUMA 1",
-			pod:           *testPod3,
-			container:     *testContainer3,
+			pod:           *testPod4,
+			container:     *testContainer4,
 			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
 			expectedHints: []topologymanager.TopologyHint{
 				{
@@ -128,15 +178,15 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:          "Request 11 CPUs, 4 available on NUMA 0, 6 available on NUMA 1",
-			pod:           *testPod4,
-			container:     *testContainer4,
+			pod:           *testPod5,
+			container:     *testContainer5,
 			defaultCPUSet: cpuset.NewCPUSet(2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
 			expectedHints: nil,
 		},
 		{
 			name:          "Request 2 CPUs, 1 available on NUMA 0, 1 available on NUMA 1",
-			pod:           *testPod1,
-			container:     *testContainer1,
+			pod:           *testPod2,
+			container:     *testContainer2,
 			defaultCPUSet: cpuset.NewCPUSet(0, 3),
 			expectedHints: []topologymanager.TopologyHint{
 				{
@@ -147,18 +197,18 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:          "Request more CPUs than available",
-			pod:           *testPod2,
-			container:     *testContainer2,
+			pod:           *testPod3,
+			container:     *testContainer3,
 			defaultCPUSet: cpuset.NewCPUSet(0, 1, 2, 3),
 			expectedHints: nil,
 		},
 		{
 			name:      "Regenerate Single-Node NUMA Hints if already allocated 1/2",
-			pod:       *testPod1,
-			container: *testContainer1,
+			pod:       *testPod2,
+			container: *testContainer2,
 			assignments: state.ContainerCPUAssignments{
-				string(testPod1.UID): map[string]cpuset.CPUSet{
-					testContainer1.Name: cpuset.NewCPUSet(0, 6),
+				string(testPod2.UID): map[string]cpuset.CPUSet{
+					testContainer2.Name: cpuset.NewCPUSet(0, 6),
 				},
 			},
 			defaultCPUSet: cpuset.NewCPUSet(),
@@ -175,11 +225,11 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:      "Regenerate Single-Node NUMA Hints if already allocated 1/2",
-			pod:       *testPod1,
-			container: *testContainer1,
+			pod:       *testPod2,
+			container: *testContainer2,
 			assignments: state.ContainerCPUAssignments{
-				string(testPod1.UID): map[string]cpuset.CPUSet{
-					testContainer1.Name: cpuset.NewCPUSet(3, 9),
+				string(testPod2.UID): map[string]cpuset.CPUSet{
+					testContainer2.Name: cpuset.NewCPUSet(3, 9),
 				},
 			},
 			defaultCPUSet: cpuset.NewCPUSet(),
@@ -196,11 +246,11 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:      "Regenerate Cross-NUMA Hints if already allocated",
-			pod:       *testPod4,
-			container: *testContainer4,
+			pod:       *testPod5,
+			container: *testContainer5,
 			assignments: state.ContainerCPUAssignments{
-				string(testPod4.UID): map[string]cpuset.CPUSet{
-					testContainer4.Name: cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+				string(testPod5.UID): map[string]cpuset.CPUSet{
+					testContainer5.Name: cpuset.NewCPUSet(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
 				},
 			},
 			defaultCPUSet: cpuset.NewCPUSet(),
@@ -213,11 +263,11 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:      "Requested less than already allocated",
-			pod:       *testPod1,
-			container: *testContainer1,
+			pod:       *testPod2,
+			container: *testContainer2,
 			assignments: state.ContainerCPUAssignments{
-				string(testPod1.UID): map[string]cpuset.CPUSet{
-					testContainer1.Name: cpuset.NewCPUSet(0, 6, 3, 9),
+				string(testPod2.UID): map[string]cpuset.CPUSet{
+					testContainer2.Name: cpuset.NewCPUSet(0, 6, 3, 9),
 				},
 			},
 			defaultCPUSet: cpuset.NewCPUSet(),
@@ -225,11 +275,11 @@ func TestGetTopologyHints(t *testing.T) {
 		},
 		{
 			name:      "Requested more than already allocated",
-			pod:       *testPod4,
-			container: *testContainer4,
+			pod:       *testPod5,
+			container: *testContainer5,
 			assignments: state.ContainerCPUAssignments{
-				string(testPod4.UID): map[string]cpuset.CPUSet{
-					testContainer4.Name: cpuset.NewCPUSet(0, 6, 3, 9),
+				string(testPod5.UID): map[string]cpuset.CPUSet{
+					testContainer5.Name: cpuset.NewCPUSet(0, 6, 3, 9),
 				},
 			},
 			defaultCPUSet: cpuset.NewCPUSet(),

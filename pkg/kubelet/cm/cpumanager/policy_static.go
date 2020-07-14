@@ -394,6 +394,11 @@ func (p *staticPolicy) generateCPUTopologyHints(availableCPUs cpuset.CPUSet, req
 			return
 		}
 
+		// If request == 1, do not append hints with NUMANodeAffinity > 1
+		if request == 1 && mask.Count() > 1 {
+			return
+		}
+
 		// Otherwise, create a new hint from the socket bitmask and add it to the
 		// list of hints.  We set all hint preferences to 'false' on the first
 		// pass through.

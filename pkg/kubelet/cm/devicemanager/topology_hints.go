@@ -137,6 +137,11 @@ func (m *ManagerImpl) generateDeviceTopologyHints(resource string, devices sets.
 			return
 		}
 
+		// If request == 1, do not append hints with NUMANodeAffinity > 1
+		if request == 1 && mask.Count() > 1 {
+			return
+		}
+
 		// Otherwise, create a new hint from the NUMA mask and add it to the
 		// list of hints.  We set all hint preferences to 'false' on the first
 		// pass through.
