@@ -325,6 +325,7 @@ type reconciledContainer struct {
 }
 
 func (m *manager) removeStaleState() {
+	klog.InfoS("REMOVE STALE STATE BEFORE %v", m.state)
 	// Only once all sources are ready do we attempt to remove any stale state.
 	// This ensures that the call to `m.activePods()` below will succeed with
 	// the actual active pods list.
@@ -365,6 +366,7 @@ func (m *manager) removeStaleState() {
 			}
 		}
 	}
+	klog.InfoS("REMOVE STALE STATE AFTER %v", m.state)
 }
 
 func (m *manager) reconcileState() (success []reconciledContainer, failure []reconciledContainer) {
