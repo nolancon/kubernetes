@@ -928,6 +928,48 @@ func TestReconcileState(t *testing.T) {
 			expectSucceededContainerName: "",
 			expectFailedContainerName:    "fakeContainerName",
 		},
+		{
+			description: "cpu manager reconclie - container state not active",
+			activePods: []*v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "fakePodName",
+						UID:  "fakePodUID",
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{
+							{
+								Name: "fakeContainerName",
+							},
+						},
+					},
+				},
+			},
+			pspPS: v1.PodStatus{
+				ContainerStatuses: []v1.ContainerStatus{
+					{
+						Name:        "fakeContainerName",
+						ContainerID: "docker://fakeContainerID",
+						State: v1.ContainerState{
+							Running: &v1.ContainerStateRunning{},
+						},
+					},
+				},
+			},
+			pspFound: true,
+			stAssignments: state.ContainerCPUAssignments{
+				"fakePodUID": map[string]cpuset.CPUSet{
+					"fakeContainerName": cpuset.NewCPUSet(1, 2),
+				},
+				"secondfakePodUID": map[string]cpuset.CPUSet{
+					"secondfakeContainerName": cpuset.NewCPUSet(3, 4),
+				},
+			},
+			stDefaultCPUSet:              cpuset.NewCPUSet(5, 6, 7),
+			updateErr:                    nil,
+			expectSucceededContainerName: "fakeContainerName",
+			expectFailedContainerName:    "",
+		},
 	}
 
 	for _, testCase := range testCases {
